@@ -27,24 +27,23 @@ jobs:
       uses: gradle/actions/setup-gradle@v4
 
     - name: Run unit tests
-      id: tests
-      run: |
-        ./gradlew testDebugUnitTest --stacktrace > build-output.log 2>&1 || {
-          echo "GRADLE_EXIT_CODE=$?" >> $GITHUB_ENV
-          echo "## Build failed! Last 80 lines:" >&2
-          tail -80 build-output.log >&2
-          # Create issue with curl
-          BODY=$(tail -100 build-output.log | jq -Rs .)
-          curl -s -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/issues" \
-            -d "{\"title\":\"CI: Build failure on ${GITHUB_SHA:0:8}\",\"body\":\"## Build output\\n\`\`\`\\n$(tail -100 build-output.log | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')\\n\`\`\`\",\"labels\":[\"ci-debug\"]}" || true
-          exit 1
-        }
+      run: ./gradlew testDebugUnitTest --stacktrace
 
     - name: Build debug APK
-      run: ./gradlew assembleDebug
+      id: build
+      run: |
+        ./gradlew assembleDebug --stacktrace > assemble-output.log 2>&1 || {
+          echo "assembleDebug failed!"
+          tail -80 assemble-output.log
+          curl -s -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues" \
+            -d "$(jq -n --arg title "CI: assembleDebug failure on ${GITHUB_SHA:0:8}" --arg body "$(tail -100 assemble-output.log)" '{title: $title, body: ("## assembleDebug output\n```\n" + $body + "\n```"), labels: ["ci-debug"]}')" || true
+          exit 1
+        }
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload debug APK
       uses: actions/upload-artifact@v4
