@@ -28,35 +28,20 @@ jobs:
 
     - name: Run unit tests
       id: tests
-      continue-on-error: true
-      run: ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee build-output.log
-
-    - name: Post build errors
-      if: steps.tests.outcome == 'failure'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          let output = 'build-output.log not found';
-          try {
-            output = fs.readFileSync('build-output.log', 'utf8');
-          } catch (e) {
-            output = `File read error: ${e.message}`;
-          }
-          const lines = output.split('\n');
-          const last120 = lines.slice(-120).join('\n');
-          // Create an issue with the build output
-          await github.rest.issues.create({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            title: `Build failure on ${context.sha.substring(0, 8)}`,
-            body: `## Build Output (last 120 lines)\n\`\`\`\n${last120.substring(0, 60000)}\n\`\`\``,
-            labels: ['ci-debug']
-          });
-
-    - name: Fail if tests failed
-      if: steps.tests.outcome == 'failure'
-      run: exit 1
+      run: |
+        ./gradlew testDebugUnitTest --stacktrace > build-output.log 2>&1 || {
+          echo "GRADLE_EXIT_CODE=$?" >> $GITHUB_ENV
+          echo "## Build failed! Last 80 lines:" >&2
+          tail -80 build-output.log >&2
+          # Create issue with curl
+          BODY=$(tail -100 build-output.log | jq -Rs .)
+          curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues" \
+            -d "{\"title\":\"CI: Build failure on ${GITHUB_SHA:0:8}\",\"body\":\"## Build output\\n\`\`\`\\n$(tail -100 build-output.log | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')\\n\`\`\`\",\"labels\":[\"ci-debug\"]}" || true
+          exit 1
+        }
 
     - name: Build debug APK
       run: ./gradlew assembleDebug
