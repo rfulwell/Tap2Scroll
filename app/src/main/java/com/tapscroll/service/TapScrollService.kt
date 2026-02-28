@@ -3,7 +3,6 @@ package com.tapscroll.service
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.res.Configuration
-import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
@@ -17,6 +16,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.FrameLayout
 import com.tapscroll.data.PreferenceStore
 import com.tapscroll.data.ScrollDirection
@@ -60,7 +60,6 @@ class TapScrollService : AccessibilityService() {
     private var screenWidth: Int = 0
     private var screenHeight: Int = 0
     private var overlaysVisible: Boolean = false
-    private val launchableAppCache = mutableMapOf<String, Boolean>()
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -111,36 +110,38 @@ class TapScrollService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                val packageName = event.packageName?.toString() ?: return
-                if (packageName == currentPackageName) return
+                // Instead of trusting event.packageName (which fires for
+                // keyboards, system UI, etc.), query the actual focused
+                // application window to determine the real foreground app.
+                val focusedPackage = getFocusedAppPackage() ?: return
+                if (focusedPackage == currentPackageName) return
 
-                // Only track real user-facing apps; ignore system UI, keyboards,
-                // status bar, etc. that fire TYPE_WINDOW_STATE_CHANGED during
-                // app transitions and would cause overlays to flicker off.
-                if (!isLaunchableApp(packageName)) {
-                    Log.d(TAG, "Ignoring non-launchable window: $packageName")
-                    return
-                }
-
-                currentPackageName = packageName
-                Log.d(TAG, "Foreground app changed: $packageName")
+                currentPackageName = focusedPackage
+                Log.d(TAG, "Foreground app changed: $focusedPackage")
                 updateOverlayVisibility()
             }
         }
     }
 
     /**
-     * Check if a package is a user-facing app (has a launcher activity).
-     * Results are cached so PackageManager is only queried once per package.
+     * Query the accessibility window list to find the focused application window.
+     * This is more reliable than event.packageName because it ignores transient
+     * windows from keyboards, system UI, status bar, etc.
      */
-    private fun isLaunchableApp(packageName: String): Boolean {
-        return launchableAppCache.getOrPut(packageName) {
-            try {
-                packageManager.getLaunchIntentForPackage(packageName) != null
-            } catch (e: Exception) {
-                false
+    private fun getFocusedAppPackage(): String? {
+        try {
+            for (window in windows) {
+                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION && window.isFocused) {
+                    val rootNode = window.root ?: continue
+                    val pkg = rootNode.packageName?.toString()
+                    rootNode.recycle()
+                    if (pkg != null) return pkg
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting focused app", e)
         }
+        return null
     }
 
     override fun onInterrupt() {
