@@ -60,7 +60,8 @@ class GestureProcessor(
         screenHeight: Int,
         direction: ScrollDirection,
         distance: Int,
-        duration: Long
+        duration: Long,
+        callback: AccessibilityService.GestureResultCallback? = null
     ): Boolean {
         val startX = screenWidth / 2f
         val startY = screenHeight / 2f
@@ -82,18 +83,7 @@ class GestureProcessor(
         val stroke = GestureDescription.StrokeDescription(path, 0, duration)
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
 
-        return service.dispatchGesture(
-            gesture,
-            object : AccessibilityService.GestureResultCallback() {
-                override fun onCompleted(gestureDescription: GestureDescription) {
-                    Log.d(TAG, "Scroll gesture completed")
-                }
-                override fun onCancelled(gestureDescription: GestureDescription) {
-                    Log.w(TAG, "Scroll gesture cancelled")
-                }
-            },
-            null
-        )
+        return service.dispatchGesture(gesture, callback, null)
     }
 
     /**

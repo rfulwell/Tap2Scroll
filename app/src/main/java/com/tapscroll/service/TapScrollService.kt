@@ -64,6 +64,7 @@ class TapScrollService : AccessibilityService() {
     private var screenHeight: Int = 0
     private var overlaysVisible: Boolean = false
     private var swipeThresholdPx: Int = 0
+    private var scrollInFlight: Boolean = false
 
     // Per-gesture tracking (reset on each ACTION_DOWN)
     private var downX: Float = 0f
@@ -267,6 +268,10 @@ class TapScrollService : AccessibilityService() {
     private fun handleZoneTouchEvent(event: MotionEvent, zone: ScrollZone, zoneView: View): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
+                // Guard: if a scroll gesture is already in flight its synthetic
+                // swipe can sweep through zone overlays — ignore those events.
+                if (scrollInFlight) return true
+
                 val x = event.rawX
                 val y = event.rawY
                 Log.d(TAG, "Zone touch DOWN at ($x, $y), direction=${zone.scrollDirection}")
@@ -293,28 +298,45 @@ class TapScrollService : AccessibilityService() {
                     }
                 }
 
-                // Not interactive — perform scroll immediately
+                // Not interactive — perform scroll immediately.
+                // Hide ALL overlays so the dispatched gesture's synthetic swipe
+                // doesn't hit another zone overlay and cascade.
                 downX = x
                 downY = y
                 gesturePassedThrough = false
+                scrollInFlight = true
+                setAllOverlaysVisible(false)
 
                 val scrollDistance = (screenHeight * currentPreferences.scrollDistancePercent).toInt()
                 val scrollDuration = currentPreferences.scrollSpeed.durationMs
 
-                val success = gestureProcessor.performScrollFromCenter(
+                // Show the tapped zone briefly for the flash, then hide it
+                // while the gesture sweeps. Other overlays stay hidden.
+                zoneView.visibility = View.VISIBLE
+                flashZone(zoneView, zone, isInteractive = false)
+                if (currentPreferences.hapticFeedback) {
+                    triggerHapticFeedback()
+                }
+
+                gestureProcessor.performScrollFromCenter(
                     screenWidth = screenWidth,
                     screenHeight = screenHeight,
                     direction = zone.scrollDirection,
                     distance = scrollDistance,
-                    duration = scrollDuration
-                )
-
-                if (success) {
-                    flashZone(zoneView, zone, isInteractive = false)
-                    if (currentPreferences.hapticFeedback) {
-                        triggerHapticFeedback()
+                    duration = scrollDuration,
+                    callback = object : GestureResultCallback() {
+                        override fun onCompleted(gestureDescription: GestureDescription) {
+                            Log.d(TAG, "Scroll gesture completed")
+                            scrollInFlight = false
+                            setAllOverlaysVisible(true)
+                        }
+                        override fun onCancelled(gestureDescription: GestureDescription) {
+                            Log.w(TAG, "Scroll gesture cancelled")
+                            scrollInFlight = false
+                            setAllOverlaysVisible(true)
+                        }
                     }
-                }
+                )
                 return true
             }
 
@@ -348,6 +370,17 @@ class TapScrollService : AccessibilityService() {
             }
 
             else -> return gesturePassedThrough.not()
+        }
+    }
+
+    /**
+     * Show or hide all zone overlay views. Used to prevent the dispatched
+     * scroll gesture from hitting zone overlays as it sweeps across the screen.
+     */
+    private fun setAllOverlaysVisible(visible: Boolean) {
+        val visibility = if (visible) View.VISIBLE else View.INVISIBLE
+        for ((overlay, _) in zoneOverlays) {
+            overlay.visibility = visibility
         }
     }
 
