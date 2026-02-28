@@ -23,7 +23,36 @@ jobs:
       uses: gradle/actions/setup-gradle@v4
 
     - name: Run unit tests
+      id: tests
+      continue-on-error: true
       run: ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee build-output.log
+
+    - name: Print build errors on failure
+      if: steps.tests.outcome == 'failure'
+      run: |
+        echo "::group::Last 100 lines of build output"
+        tail -100 build-output.log
+        echo "::endgroup::"
+        echo ""
+        echo "::group::Errors and failures"
+        grep -i -A 5 "error\|FAILED\|failure\|exception" build-output.log || echo "No matches found"
+        echo "::endgroup::"
+        echo ""
+        echo "BUILD_ERRORS<<GHEOF" >> "$GITHUB_OUTPUT"
+        tail -80 build-output.log >> "$GITHUB_OUTPUT"
+        echo "GHEOF" >> "$GITHUB_OUTPUT"
+
+    - name: Create error summary
+      if: steps.tests.outcome == 'failure'
+      run: |
+        echo "## Build Failure Details" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        tail -80 build-output.log >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+    - name: Fail if tests failed
+      if: steps.tests.outcome == 'failure'
+      run: exit 1
 
     - name: Build debug APK
       run: ./gradlew assembleDebug
