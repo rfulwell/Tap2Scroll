@@ -1,6 +1,7 @@
 package com.tapscroll.service
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.os.Build
@@ -15,67 +16,66 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.FrameLayout
 import com.tapscroll.data.PreferenceStore
-import com.tapscroll.data.ScrollDirection
+import com.tapscroll.data.ScrollZone
 import com.tapscroll.data.UserPreferences
+import com.tapscroll.util.NodeTreeHelper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 
 /**
- * Main accessibility service that handles tap-to-scroll functionality
+ * Main accessibility service that handles tap-to-scroll functionality.
+ * Uses per-zone overlay windows so touches outside zones pass through normally.
  */
 class TapScrollService : AccessibilityService() {
 
     companion object {
         private const val TAG = "TapScrollService"
-        
-        // Service instance for checking if running
+
         var instance: TapScrollService? = null
             private set
-        
+
         fun isRunning(): Boolean = instance != null
     }
 
     private lateinit var preferenceStore: PreferenceStore
     private lateinit var gestureProcessor: GestureProcessor
     private lateinit var windowManager: WindowManager
-    
-    private var overlayView: View? = null
+    private val nodeTreeHelper = NodeTreeHelper()
+
+    private val zoneOverlays = mutableListOf<View>()
     private var currentPreferences: UserPreferences = UserPreferences()
     private var currentPackageName: String? = null
     private var screenWidth: Int = 0
     private var screenHeight: Int = 0
+    private var overlaysVisible: Boolean = false
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
-        
+
         preferenceStore = PreferenceStore(applicationContext)
         gestureProcessor = GestureProcessor(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        
+
         updateScreenDimensions()
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.d(TAG, "Service connected")
-        
+
         instance = this
-        
-        // Start collecting preference changes
+
         serviceScope.launch {
             preferenceStore.preferencesFlow.collectLatest { preferences ->
                 Log.d(TAG, "Preferences updated")
                 currentPreferences = preferences
                 gestureProcessor.updateZones(screenWidth, screenHeight, preferences)
-                updateOverlayVisibility()
+                recreateZoneOverlays()
             }
         }
-        
-        // Create the touch overlay
-        createOverlay()
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
@@ -88,7 +88,7 @@ class TapScrollService : AccessibilityService() {
         Log.d(TAG, "Service destroyed")
         instance = null
         serviceScope.cancel()
-        removeOverlay()
+        removeZoneOverlays()
         gestureProcessor.clearCache()
         super.onDestroy()
     }
@@ -98,7 +98,6 @@ class TapScrollService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                // Track which app is in foreground
                 val packageName = event.packageName?.toString()
                 if (packageName != null && packageName != currentPackageName) {
                     currentPackageName = packageName
@@ -116,18 +115,12 @@ class TapScrollService : AccessibilityService() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         Log.d(TAG, "Configuration changed")
-        
+
         updateScreenDimensions()
         gestureProcessor.updateZones(screenWidth, screenHeight, currentPreferences)
-        
-        // Recreate overlay to adjust to new dimensions
-        removeOverlay()
-        createOverlay()
+        recreateZoneOverlays()
     }
 
-    /**
-     * Update screen dimensions from display metrics
-     */
     private fun updateScreenDimensions() {
         val displayMetrics = resources.displayMetrics
         screenWidth = displayMetrics.widthPixels
@@ -136,125 +129,158 @@ class TapScrollService : AccessibilityService() {
     }
 
     /**
-     * Create the transparent touch overlay
+     * Recreate zone overlays (called when zones or app changes)
      */
-    private fun createOverlay() {
-        if (overlayView != null) {
-            Log.d(TAG, "Overlay already exists")
-            return
-        }
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-        }
-
-        overlayView = FrameLayout(this).apply {
-            // Initially invisible
-            visibility = View.GONE
-            
-            setOnTouchListener { _, event ->
-                handleTouchEvent(event)
-            }
-        }
-
-        try {
-            windowManager.addView(overlayView, params)
-            Log.d(TAG, "Overlay created")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create overlay", e)
+    private fun recreateZoneOverlays() {
+        removeZoneOverlays()
+        if (shouldShowOverlays()) {
+            createZoneOverlays()
         }
     }
 
     /**
-     * Remove the touch overlay
+     * Create individual overlay windows for each scroll zone.
+     * Only zone areas get overlays; the rest of the screen passes touches through.
      */
-    private fun removeOverlay() {
-        overlayView?.let { view ->
+    private fun createZoneOverlays() {
+        val zones = gestureProcessor.getZones()
+
+        for (zone in zones) {
+            val width = (zone.right - zone.left).toInt()
+            val height = (zone.bottom - zone.top).toInt()
+            if (width <= 0 || height <= 0) continue
+
+            val params = WindowManager.LayoutParams(
+                width,
+                height,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = zone.left.toInt()
+                y = zone.top.toInt()
+            }
+
+            val capturedZone = zone
+            val overlayView = FrameLayout(this).apply {
+                setOnTouchListener { view, event ->
+                    handleZoneTouchEvent(event, capturedZone, view)
+                }
+            }
+
             try {
-                windowManager.removeView(view)
-                Log.d(TAG, "Overlay removed")
+                windowManager.addView(overlayView, params)
+                zoneOverlays.add(overlayView)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to remove overlay", e)
+                Log.e(TAG, "Failed to create zone overlay", e)
             }
         }
-        overlayView = null
+
+        overlaysVisible = zoneOverlays.isNotEmpty()
+        Log.d(TAG, "Created ${zoneOverlays.size} zone overlays")
     }
 
     /**
-     * Update overlay visibility based on current app and preferences
+     * Remove all zone overlay windows
+     */
+    private fun removeZoneOverlays() {
+        for (overlay in zoneOverlays) {
+            try {
+                windowManager.removeView(overlay)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to remove zone overlay", e)
+            }
+        }
+        zoneOverlays.clear()
+        overlaysVisible = false
+    }
+
+    private fun shouldShowOverlays(): Boolean {
+        return currentPackageName != null &&
+            currentPreferences.activeApps.any {
+                it.packageName == currentPackageName && it.enabled
+            }
+    }
+
+    /**
+     * Show or hide overlays based on current foreground app
      */
     private fun updateOverlayVisibility() {
-        val shouldShow = currentPackageName != null &&
-            currentPreferences.activeApps.any { 
-                it.packageName == currentPackageName && it.enabled 
-            }
-
-        overlayView?.visibility = if (shouldShow) View.VISIBLE else View.GONE
+        val shouldShow = shouldShowOverlays()
+        if (shouldShow && !overlaysVisible) {
+            createZoneOverlays()
+        } else if (!shouldShow && overlaysVisible) {
+            removeZoneOverlays()
+        }
         Log.d(TAG, "Overlay visibility: $shouldShow (app: $currentPackageName)")
     }
 
     /**
-     * Handle touch events on the overlay
+     * Handle a touch event on a zone overlay
      */
-    private fun handleTouchEvent(event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                val x = event.rawX
-                val y = event.rawY
-                
-                Log.d(TAG, "Touch at ($x, $y)")
+    private fun handleZoneTouchEvent(event: MotionEvent, zone: ScrollZone, zoneView: View): Boolean {
+        if (event.action != MotionEvent.ACTION_DOWN) return true
 
-                // Get root node for interactive element detection
-                val rootNode = rootInActiveWindow
+        val x = event.rawX
+        val y = event.rawY
 
-                // Process the tap
-                val result = gestureProcessor.processTap(
-                    x = x,
-                    y = y,
-                    preferences = currentPreferences,
-                    rootNode = rootNode
-                )
+        Log.d(TAG, "Zone tap at ($x, $y), direction=${zone.scrollDirection}")
 
-                rootNode?.recycle()
+        // Check for interactive elements if enabled
+        if (currentPreferences.avoidInteractiveElements) {
+            val rootNode = rootInActiveWindow
+            if (rootNode != null) {
+                val nodeAtTap = nodeTreeHelper.findNodeAtCoordinates(rootNode, x.toInt(), y.toInt())
 
-                when (result) {
-                    is GestureProcessor.ProcessResult.ScrollTriggered -> {
-                        // Provide feedback
-                        if (currentPreferences.hapticFeedback) {
-                            triggerHapticFeedback()
-                        }
-                        if (currentPreferences.visualIndicator) {
-                            showScrollIndicator(result.direction)
-                        }
-                        // Consume the event - don't pass through
-                        return true
-                    }
-                    is GestureProcessor.ProcessResult.InteractiveElement -> {
-                        // Don't consume - let the tap go through to the element
-                        return false
-                    }
-                    is GestureProcessor.ProcessResult.NotInZone -> {
-                        // Don't consume - pass through
-                        return false
-                    }
-                    is GestureProcessor.ProcessResult.ScrollFailed -> {
-                        // Don't consume - let user retry
-                        return false
-                    }
+                if (nodeAtTap != null && nodeTreeHelper.isInteractiveElement(nodeAtTap)) {
+                    Log.d(TAG, "Tap on interactive element, replaying tap")
+                    nodeAtTap.recycle()
+                    rootNode.recycle()
+                    replayTap(x, y, zoneView)
+                    return true
                 }
+
+                nodeAtTap?.recycle()
+                rootNode.recycle()
             }
         }
-        
-        // Pass through other touch events (move, up, etc.)
-        return false
+
+        // Perform scroll from center of screen (outside any zone overlay)
+        val scrollDistance = (screenHeight * currentPreferences.scrollDistancePercent).toInt()
+        val scrollDuration = currentPreferences.scrollSpeed.durationMs
+
+        val success = gestureProcessor.performScrollFromCenter(
+            screenWidth = screenWidth,
+            screenHeight = screenHeight,
+            direction = zone.scrollDirection,
+            distance = scrollDistance,
+            duration = scrollDuration
+        )
+
+        if (success && currentPreferences.hapticFeedback) {
+            triggerHapticFeedback()
+        }
+
+        return true
+    }
+
+    /**
+     * Replay a tap to the underlying app by temporarily hiding the zone overlay
+     * so the dispatched tap gesture reaches the app beneath
+     */
+    private fun replayTap(x: Float, y: Float, zoneView: View) {
+        zoneView.visibility = View.GONE
+
+        gestureProcessor.performTap(x, y, object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription) {
+                zoneView.visibility = View.VISIBLE
+            }
+            override fun onCancelled(gestureDescription: GestureDescription) {
+                zoneView.visibility = View.VISIBLE
+            }
+        })
     }
 
     /**
@@ -275,16 +301,5 @@ class TapScrollService : AccessibilityService() {
             @Suppress("DEPRECATION")
             vibrator.vibrate(30)
         }
-    }
-
-    /**
-     * Show visual scroll indicator (placeholder - could be enhanced with animation)
-     */
-    private fun showScrollIndicator(direction: ScrollDirection) {
-        // For now, just log it. Could add an animated arrow overlay here.
-        Log.d(TAG, "Scroll indicator: $direction")
-        
-        // TODO: Implement visual indicator animation
-        // Could add a temporary ImageView with an arrow that fades in/out
     }
 }
