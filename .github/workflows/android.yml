@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,12 +38,16 @@ jobs:
           const fs = require('fs');
           const output = fs.readFileSync('build-output.log', 'utf8');
           const lines = output.split('\n');
-          const last150 = lines.slice(-150).join('\n');
+          // Get error lines and last 100 lines
+          const errorLines = lines.filter(l => /error:|FAILED|Error:|e:|w:/.test(l)).slice(0, 30);
+          const last100 = lines.slice(-100);
+          const combined = [...new Set([...errorLines, '---TAIL---', ...last100])];
+          const body = combined.join('\n');
           await github.rest.repos.createCommitComment({
             owner: context.repo.owner,
             repo: context.repo.repo,
             commit_sha: context.sha,
-            body: `## Build Failure\n\`\`\`\n${last150}\n\`\`\``
+            body: `## Build Failure\n\`\`\`\n${body.substring(0, 60000)}\n\`\`\``
           });
 
     - name: Fail if tests failed
