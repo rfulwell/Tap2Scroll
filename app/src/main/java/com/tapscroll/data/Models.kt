@@ -5,8 +5,7 @@ package com.tapscroll.data
  */
 enum class ZoneType {
     EDGES,      // Top and bottom edge zones
-    SIDES,      // Left and right split
-    CORNERS     // Four corner zones
+    SIDES       // Left and right split
 }
 
 /**
@@ -27,6 +26,15 @@ enum class ScrollSpeed(val durationMs: Long) {
 }
 
 /**
+ * Visual feedback mode for overlays
+ */
+enum class OverlayFeedbackMode {
+    INVISIBLE,      // Overlays are fully invisible, no visual feedback
+    FLASH_ON_TAP,   // Overlays invisible until tapped, then briefly flash
+    DEBUG           // Overlays always visible with colored backgrounds + flash
+}
+
+/**
  * Configuration for an individual app
  */
 data class AppConfig(
@@ -37,22 +45,24 @@ data class AppConfig(
 )
 
 /**
- * Zone configuration parameters
+ * Zone configuration parameters.
+ * Start/end values are fractions of the relevant screen dimension:
+ *   EDGES: fractions of screen height (0.0 = top, 1.0 = bottom)
+ *   SIDES: fractions of screen width (0.0 = left, 1.0 = right)
  */
 data class ZoneConfig(
     val zoneType: ZoneType = ZoneType.EDGES,
-    val topZonePercent: Float = 0.15f,
-    val bottomZonePercent: Float = 0.15f,
-    val leftZonePercent: Float = 0.20f,
-    val rightZonePercent: Float = 0.20f,
-    val cornerZonePercent: Float = 0.15f
+    val scrollUpZoneStart: Float = 0.0f,
+    val scrollUpZoneEnd: Float = 0.15f,
+    val scrollDownZoneStart: Float = 0.85f,
+    val scrollDownZoneEnd: Float = 1.0f
 )
 
 /**
  * Complete user preferences
  */
 data class UserPreferences(
-    val serviceEnabled: Boolean = false,
+    val serviceEnabled: Boolean = true,
     val scrollDistancePercent: Float = 0.75f,
     val scrollSpeed: ScrollSpeed = ScrollSpeed.MEDIUM,
     val zoneConfig: ZoneConfig = ZoneConfig(),
@@ -60,7 +70,8 @@ data class UserPreferences(
     val hapticFeedback: Boolean = true,
     val visualIndicator: Boolean = true,
     val avoidInteractiveElements: Boolean = true,
-    val debugMode: Boolean = false,
+    val overlayFeedbackMode: OverlayFeedbackMode = OverlayFeedbackMode.FLASH_ON_TAP,
+    val overlayOpacity: Float = 0.3f,
     val activeApps: List<AppConfig> = listOf(
         AppConfig("com.brave.browser", "Brave Browser", true)
     )

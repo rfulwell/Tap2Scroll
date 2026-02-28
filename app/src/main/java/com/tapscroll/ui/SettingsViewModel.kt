@@ -10,14 +10,10 @@ import com.tapscroll.service.TapScrollService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-/**
- * ViewModel for the settings screen
- */
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val preferenceStore = (application as TapScrollApplication).preferenceStore
 
-    // UI state
     val preferences: StateFlow<UserPreferences> = preferenceStore.preferencesFlow
         .stateIn(
             scope = viewModelScope,
@@ -25,138 +21,123 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             initialValue = UserPreferences()
         )
 
-    // Service running state
     private val _isServiceRunning = MutableStateFlow(false)
     val isServiceRunning: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
 
-    // Installed apps for app selector
     private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
     val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps.asStateFlow()
 
     init {
-        // Periodically check if service is running
         viewModelScope.launch {
             while (true) {
                 _isServiceRunning.value = TapScrollService.isRunning()
                 kotlinx.coroutines.delay(1000)
             }
         }
-
-        // Load installed apps
         loadInstalledApps()
     }
 
-    /**
-     * Update scroll distance percentage
-     */
+    fun setServiceEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferenceStore.setServiceEnabled(enabled)
+        }
+    }
+
     fun setScrollDistance(percent: Float) {
         viewModelScope.launch {
             preferenceStore.setScrollDistancePercent(percent)
         }
     }
 
-    /**
-     * Update scroll speed
-     */
     fun setScrollSpeed(speed: ScrollSpeed) {
         viewModelScope.launch {
             preferenceStore.setScrollSpeed(speed)
         }
     }
 
-    /**
-     * Update zone type
-     */
     fun setZoneType(zoneType: ZoneType) {
         viewModelScope.launch {
-            preferenceStore.setZoneType(zoneType)
+            // Reset to sensible defaults for the new zone type
+            val config = when (zoneType) {
+                ZoneType.EDGES -> ZoneConfig(
+                    zoneType = ZoneType.EDGES,
+                    scrollUpZoneStart = 0.0f,
+                    scrollUpZoneEnd = 0.15f,
+                    scrollDownZoneStart = 0.85f,
+                    scrollDownZoneEnd = 1.0f
+                )
+                ZoneType.SIDES -> ZoneConfig(
+                    zoneType = ZoneType.SIDES,
+                    scrollUpZoneStart = 0.0f,
+                    scrollUpZoneEnd = 0.20f,
+                    scrollDownZoneStart = 0.80f,
+                    scrollDownZoneEnd = 1.0f
+                )
+            }
+            preferenceStore.setZoneConfig(config)
         }
     }
 
-    /**
-     * Update zone configuration
-     */
     fun setZoneConfig(config: ZoneConfig) {
         viewModelScope.launch {
             preferenceStore.setZoneConfig(config)
         }
     }
 
-    /**
-     * Toggle invert direction
-     */
     fun setInvertDirection(invert: Boolean) {
         viewModelScope.launch {
             preferenceStore.setInvertDirection(invert)
         }
     }
 
-    /**
-     * Toggle haptic feedback
-     */
     fun setHapticFeedback(enabled: Boolean) {
         viewModelScope.launch {
             preferenceStore.setHapticFeedback(enabled)
         }
     }
 
-    /**
-     * Toggle visual indicator
-     */
     fun setVisualIndicator(enabled: Boolean) {
         viewModelScope.launch {
             preferenceStore.setVisualIndicator(enabled)
         }
     }
 
-    /**
-     * Toggle avoid interactive elements
-     */
     fun setAvoidInteractiveElements(enabled: Boolean) {
         viewModelScope.launch {
             preferenceStore.setAvoidInteractiveElements(enabled)
         }
     }
 
-    /**
-     * Toggle debug mode
-     */
-    fun setDebugMode(enabled: Boolean) {
+    fun setOverlayFeedbackMode(mode: OverlayFeedbackMode) {
         viewModelScope.launch {
-            preferenceStore.setDebugMode(enabled)
+            preferenceStore.setOverlayFeedbackMode(mode)
         }
     }
 
-    /**
-     * Add an app to active apps list
-     */
+    fun setOverlayOpacity(opacity: Float) {
+        viewModelScope.launch {
+            preferenceStore.setOverlayOpacity(opacity)
+        }
+    }
+
     fun addApp(packageName: String, appName: String) {
         viewModelScope.launch {
             preferenceStore.addActiveApp(AppConfig(packageName, appName, true))
         }
     }
 
-    /**
-     * Remove an app from active apps list
-     */
     fun removeApp(packageName: String) {
         viewModelScope.launch {
             preferenceStore.removeActiveApp(packageName)
         }
     }
 
-    /**
-     * Toggle an app's enabled state
-     */
     fun toggleAppEnabled(packageName: String) {
         viewModelScope.launch {
             preferenceStore.toggleAppEnabled(packageName)
         }
     }
 
-    /**
-     * Load list of installed apps that have launcher activities (browsers, etc.)
-     */
     private fun loadInstalledApps() {
         viewModelScope.launch {
             val pm = getApplication<Application>().packageManager
@@ -164,9 +145,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
             try {
                 val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                
+
                 for (appInfo in packages) {
-                    // Skip system apps without launcher activity
                     val launchIntent = pm.getLaunchIntentForPackage(appInfo.packageName)
                     if (launchIntent == null) continue
 
@@ -177,11 +157,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     ))
                 }
 
-                // Sort alphabetically
                 apps.sortBy { it.appName.lowercase() }
-                
-            } catch (e: Exception) {
-                // Handle any package manager errors
+
+            } catch (_: Exception) {
             }
 
             _installedApps.value = apps
@@ -189,9 +167,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 }
 
-/**
- * Info about an installed app
- */
 data class InstalledAppInfo(
     val packageName: String,
     val appName: String

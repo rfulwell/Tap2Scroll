@@ -244,11 +244,10 @@ fun ZoneTypeSelector(
     onTypeSelected: (ZoneType) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val options = listOf("Edges", "Sides", "Corners")
+    val options = listOf("Edges", "Sides")
     val selectedIndex = when (selectedType) {
         ZoneType.EDGES -> 0
         ZoneType.SIDES -> 1
-        ZoneType.CORNERS -> 2
     }
 
     SegmentedButtonRow(
@@ -258,8 +257,7 @@ fun ZoneTypeSelector(
         onSelectionChange = { index ->
             val type = when (index) {
                 0 -> ZoneType.EDGES
-                1 -> ZoneType.SIDES
-                else -> ZoneType.CORNERS
+                else -> ZoneType.SIDES
             }
             onTypeSelected(type)
         },

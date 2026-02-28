@@ -30,15 +30,17 @@ class ZoneCalculatorTest {
     fun `edge zones - calculates correct boundaries`() {
         val config = ZoneConfig(
             zoneType = ZoneType.EDGES,
-            topZonePercent = 0.15f,
-            bottomZonePercent = 0.15f
+            scrollUpZoneStart = 0.0f,
+            scrollUpZoneEnd = 0.15f,
+            scrollDownZoneStart = 0.85f,
+            scrollDownZoneEnd = 1.0f
         )
 
         val zones = calculator.calculateZones(screenWidth, screenHeight, config)
 
         assertEquals(2, zones.size)
 
-        // Top zone
+        // Top zone (scroll up)
         val topZone = zones[0]
         assertEquals(0f, topZone.left, DELTA)
         assertEquals(0f, topZone.top, DELTA)
@@ -46,7 +48,7 @@ class ZoneCalculatorTest {
         assertEquals(screenHeight * 0.15f, topZone.bottom, DELTA)
         assertEquals(ScrollDirection.UP, topZone.scrollDirection)
 
-        // Bottom zone
+        // Bottom zone (scroll down)
         val bottomZone = zones[1]
         assertEquals(0f, bottomZone.left, DELTA)
         assertEquals(screenHeight * 0.85f, bottomZone.top, DELTA)
@@ -59,8 +61,10 @@ class ZoneCalculatorTest {
     fun `edge zones - inverted directions`() {
         val config = ZoneConfig(
             zoneType = ZoneType.EDGES,
-            topZonePercent = 0.15f,
-            bottomZonePercent = 0.15f
+            scrollUpZoneStart = 0.0f,
+            scrollUpZoneEnd = 0.15f,
+            scrollDownZoneStart = 0.85f,
+            scrollDownZoneEnd = 1.0f
         )
 
         val zones = calculator.calculateZones(screenWidth, screenHeight, config, invertDirection = true)
@@ -73,15 +77,17 @@ class ZoneCalculatorTest {
     fun `side zones - calculates correct boundaries`() {
         val config = ZoneConfig(
             zoneType = ZoneType.SIDES,
-            leftZonePercent = 0.20f,
-            rightZonePercent = 0.20f
+            scrollUpZoneStart = 0.0f,
+            scrollUpZoneEnd = 0.20f,
+            scrollDownZoneStart = 0.80f,
+            scrollDownZoneEnd = 1.0f
         )
 
         val zones = calculator.calculateZones(screenWidth, screenHeight, config)
 
         assertEquals(2, zones.size)
 
-        // Left zone
+        // Left zone (scroll up)
         val leftZone = zones[0]
         assertEquals(0f, leftZone.left, DELTA)
         assertEquals(0f, leftZone.top, DELTA)
@@ -89,7 +95,7 @@ class ZoneCalculatorTest {
         assertEquals(screenHeight.toFloat(), leftZone.bottom, DELTA)
         assertEquals(ScrollDirection.UP, leftZone.scrollDirection)
 
-        // Right zone
+        // Right zone (scroll down)
         val rightZone = zones[1]
         assertEquals(screenWidth * 0.80f, rightZone.left, DELTA)
         assertEquals(0f, rightZone.top, DELTA)
@@ -99,47 +105,37 @@ class ZoneCalculatorTest {
     }
 
     @Test
-    fun `corner zones - calculates four corners`() {
+    fun `edge zones - with gaps`() {
+        // Zones positioned with gaps at top, middle, and bottom
         val config = ZoneConfig(
-            zoneType = ZoneType.CORNERS,
-            cornerZonePercent = 0.15f
+            zoneType = ZoneType.EDGES,
+            scrollUpZoneStart = 0.10f,   // 10% gap at top
+            scrollUpZoneEnd = 0.30f,
+            scrollDownZoneStart = 0.70f,
+            scrollDownZoneEnd = 0.90f     // 10% gap at bottom
         )
 
         val zones = calculator.calculateZones(screenWidth, screenHeight, config)
 
-        assertEquals(4, zones.size)
+        assertEquals(2, zones.size)
 
-        // Top-left
-        val topLeft = zones[0]
-        assertEquals(0f, topLeft.left, DELTA)
-        assertEquals(0f, topLeft.top, DELTA)
-        assertEquals(ScrollDirection.UP, topLeft.scrollDirection)
+        // Up zone starts 10% from top
+        assertEquals(screenHeight * 0.10f, zones[0].top, DELTA)
+        assertEquals(screenHeight * 0.30f, zones[0].bottom, DELTA)
 
-        // Top-right
-        val topRight = zones[1]
-        assertEquals(screenWidth * 0.85f, topRight.left, DELTA)
-        assertEquals(0f, topRight.top, DELTA)
-        assertEquals(ScrollDirection.UP, topRight.scrollDirection)
-
-        // Bottom-left
-        val bottomLeft = zones[2]
-        assertEquals(0f, bottomLeft.left, DELTA)
-        assertEquals(screenHeight * 0.85f, bottomLeft.top, DELTA)
-        assertEquals(ScrollDirection.DOWN, bottomLeft.scrollDirection)
-
-        // Bottom-right
-        val bottomRight = zones[3]
-        assertEquals(screenWidth * 0.85f, bottomRight.left, DELTA)
-        assertEquals(screenHeight * 0.85f, bottomRight.top, DELTA)
-        assertEquals(ScrollDirection.DOWN, bottomRight.scrollDirection)
+        // Down zone ends 10% from bottom
+        assertEquals(screenHeight * 0.70f, zones[1].top, DELTA)
+        assertEquals(screenHeight * 0.90f, zones[1].bottom, DELTA)
     }
 
     @Test
     fun `findZoneAt - returns correct zone`() {
         val config = ZoneConfig(
             zoneType = ZoneType.EDGES,
-            topZonePercent = 0.15f,
-            bottomZonePercent = 0.15f
+            scrollUpZoneStart = 0.0f,
+            scrollUpZoneEnd = 0.15f,
+            scrollDownZoneStart = 0.85f,
+            scrollDownZoneEnd = 1.0f
         )
 
         val zones = calculator.calculateZones(screenWidth, screenHeight, config)
@@ -163,8 +159,10 @@ class ZoneCalculatorTest {
     fun `zone contains - boundary conditions`() {
         val config = ZoneConfig(
             zoneType = ZoneType.EDGES,
-            topZonePercent = 0.15f,
-            bottomZonePercent = 0.15f
+            scrollUpZoneStart = 0.0f,
+            scrollUpZoneEnd = 0.15f,
+            scrollDownZoneStart = 0.85f,
+            scrollDownZoneEnd = 1.0f
         )
 
         val zones = calculator.calculateZones(screenWidth, screenHeight, config)
@@ -180,11 +178,13 @@ class ZoneCalculatorTest {
     }
 
     @Test
-    fun `custom zone percentages`() {
+    fun `custom zone sizes`() {
         val config = ZoneConfig(
             zoneType = ZoneType.EDGES,
-            topZonePercent = 0.25f,  // 25% top
-            bottomZonePercent = 0.10f // 10% bottom
+            scrollUpZoneStart = 0.0f,
+            scrollUpZoneEnd = 0.25f,
+            scrollDownZoneStart = 0.90f,
+            scrollDownZoneEnd = 1.0f
         )
 
         val zones = calculator.calculateZones(screenWidth, screenHeight, config)

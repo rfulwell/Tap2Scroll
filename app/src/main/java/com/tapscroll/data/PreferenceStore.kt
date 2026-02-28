@@ -14,27 +14,23 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class PreferenceStore(private val context: Context) {
 
     companion object {
-        // Keys for preferences
         private val SERVICE_ENABLED = booleanPreferencesKey("service_enabled")
         private val SCROLL_DISTANCE_PERCENT = floatPreferencesKey("scroll_distance_percent")
         private val SCROLL_SPEED = stringPreferencesKey("scroll_speed")
         private val ZONE_TYPE = stringPreferencesKey("zone_type")
-        private val TOP_ZONE_PERCENT = floatPreferencesKey("top_zone_percent")
-        private val BOTTOM_ZONE_PERCENT = floatPreferencesKey("bottom_zone_percent")
-        private val LEFT_ZONE_PERCENT = floatPreferencesKey("left_zone_percent")
-        private val RIGHT_ZONE_PERCENT = floatPreferencesKey("right_zone_percent")
-        private val CORNER_ZONE_PERCENT = floatPreferencesKey("corner_zone_percent")
+        private val SCROLL_UP_ZONE_START = floatPreferencesKey("scroll_up_zone_start")
+        private val SCROLL_UP_ZONE_END = floatPreferencesKey("scroll_up_zone_end")
+        private val SCROLL_DOWN_ZONE_START = floatPreferencesKey("scroll_down_zone_start")
+        private val SCROLL_DOWN_ZONE_END = floatPreferencesKey("scroll_down_zone_end")
         private val INVERT_DIRECTION = booleanPreferencesKey("invert_direction")
         private val HAPTIC_FEEDBACK = booleanPreferencesKey("haptic_feedback")
         private val VISUAL_INDICATOR = booleanPreferencesKey("visual_indicator")
         private val AVOID_INTERACTIVE = booleanPreferencesKey("avoid_interactive")
         private val ACTIVE_APPS = stringPreferencesKey("active_apps")
-        private val DEBUG_MODE = booleanPreferencesKey("debug_mode")
+        private val OVERLAY_FEEDBACK_MODE = stringPreferencesKey("overlay_feedback_mode")
+        private val OVERLAY_OPACITY = floatPreferencesKey("overlay_opacity")
     }
 
-    /**
-     * Flow of user preferences that updates automatically when preferences change
-     */
     val preferencesFlow: Flow<UserPreferences> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
@@ -47,19 +43,15 @@ class PreferenceStore(private val context: Context) {
             mapPreferences(preferences)
         }
 
-    /**
-     * Map raw preferences to UserPreferences data class
-     */
     private fun mapPreferences(preferences: Preferences): UserPreferences {
         val zoneConfig = ZoneConfig(
-            zoneType = preferences[ZONE_TYPE]?.let { 
-                ZoneType.valueOf(it) 
+            zoneType = preferences[ZONE_TYPE]?.let {
+                try { ZoneType.valueOf(it) } catch (_: Exception) { ZoneType.EDGES }
             } ?: ZoneType.EDGES,
-            topZonePercent = preferences[TOP_ZONE_PERCENT] ?: 0.15f,
-            bottomZonePercent = preferences[BOTTOM_ZONE_PERCENT] ?: 0.15f,
-            leftZonePercent = preferences[LEFT_ZONE_PERCENT] ?: 0.20f,
-            rightZonePercent = preferences[RIGHT_ZONE_PERCENT] ?: 0.20f,
-            cornerZonePercent = preferences[CORNER_ZONE_PERCENT] ?: 0.15f
+            scrollUpZoneStart = preferences[SCROLL_UP_ZONE_START] ?: 0.0f,
+            scrollUpZoneEnd = preferences[SCROLL_UP_ZONE_END] ?: 0.15f,
+            scrollDownZoneStart = preferences[SCROLL_DOWN_ZONE_START] ?: 0.85f,
+            scrollDownZoneEnd = preferences[SCROLL_DOWN_ZONE_END] ?: 1.0f
         )
 
         val activeApps = preferences[ACTIVE_APPS]?.let { json ->
@@ -67,128 +59,100 @@ class PreferenceStore(private val context: Context) {
         } ?: listOf(AppConfig("com.brave.browser", "Brave Browser", true))
 
         return UserPreferences(
-            serviceEnabled = preferences[SERVICE_ENABLED] ?: false,
+            serviceEnabled = preferences[SERVICE_ENABLED] ?: true,
             scrollDistancePercent = preferences[SCROLL_DISTANCE_PERCENT] ?: 0.75f,
-            scrollSpeed = preferences[SCROLL_SPEED]?.let { 
-                ScrollSpeed.valueOf(it) 
+            scrollSpeed = preferences[SCROLL_SPEED]?.let {
+                ScrollSpeed.valueOf(it)
             } ?: ScrollSpeed.MEDIUM,
             zoneConfig = zoneConfig,
             invertDirection = preferences[INVERT_DIRECTION] ?: false,
             hapticFeedback = preferences[HAPTIC_FEEDBACK] ?: true,
             visualIndicator = preferences[VISUAL_INDICATOR] ?: true,
             avoidInteractiveElements = preferences[AVOID_INTERACTIVE] ?: true,
-            debugMode = preferences[DEBUG_MODE] ?: false,
+            overlayFeedbackMode = preferences[OVERLAY_FEEDBACK_MODE]?.let {
+                try { OverlayFeedbackMode.valueOf(it) } catch (_: Exception) { OverlayFeedbackMode.FLASH_ON_TAP }
+            } ?: OverlayFeedbackMode.FLASH_ON_TAP,
+            overlayOpacity = preferences[OVERLAY_OPACITY] ?: 0.3f,
             activeApps = activeApps
         )
     }
 
-    /**
-     * Update service enabled state
-     */
     suspend fun setServiceEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[SERVICE_ENABLED] = enabled
         }
     }
 
-    /**
-     * Update scroll distance percentage
-     */
     suspend fun setScrollDistancePercent(percent: Float) {
         context.dataStore.edit { preferences ->
             preferences[SCROLL_DISTANCE_PERCENT] = percent.coerceIn(0.1f, 1.0f)
         }
     }
 
-    /**
-     * Update scroll speed
-     */
     suspend fun setScrollSpeed(speed: ScrollSpeed) {
         context.dataStore.edit { preferences ->
             preferences[SCROLL_SPEED] = speed.name
         }
     }
 
-    /**
-     * Update zone type
-     */
     suspend fun setZoneType(zoneType: ZoneType) {
         context.dataStore.edit { preferences ->
             preferences[ZONE_TYPE] = zoneType.name
         }
     }
 
-    /**
-     * Update zone configuration
-     */
     suspend fun setZoneConfig(config: ZoneConfig) {
         context.dataStore.edit { preferences ->
             preferences[ZONE_TYPE] = config.zoneType.name
-            preferences[TOP_ZONE_PERCENT] = config.topZonePercent
-            preferences[BOTTOM_ZONE_PERCENT] = config.bottomZonePercent
-            preferences[LEFT_ZONE_PERCENT] = config.leftZonePercent
-            preferences[RIGHT_ZONE_PERCENT] = config.rightZonePercent
-            preferences[CORNER_ZONE_PERCENT] = config.cornerZonePercent
+            preferences[SCROLL_UP_ZONE_START] = config.scrollUpZoneStart
+            preferences[SCROLL_UP_ZONE_END] = config.scrollUpZoneEnd
+            preferences[SCROLL_DOWN_ZONE_START] = config.scrollDownZoneStart
+            preferences[SCROLL_DOWN_ZONE_END] = config.scrollDownZoneEnd
         }
     }
 
-    /**
-     * Update invert direction setting
-     */
     suspend fun setInvertDirection(invert: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[INVERT_DIRECTION] = invert
         }
     }
 
-    /**
-     * Update haptic feedback setting
-     */
     suspend fun setHapticFeedback(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[HAPTIC_FEEDBACK] = enabled
         }
     }
 
-    /**
-     * Update visual indicator setting
-     */
     suspend fun setVisualIndicator(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[VISUAL_INDICATOR] = enabled
         }
     }
 
-    /**
-     * Update avoid interactive elements setting
-     */
     suspend fun setAvoidInteractiveElements(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[AVOID_INTERACTIVE] = enabled
         }
     }
 
-    /**
-     * Update debug mode setting
-     */
-    suspend fun setDebugMode(enabled: Boolean) {
+    suspend fun setOverlayFeedbackMode(mode: OverlayFeedbackMode) {
         context.dataStore.edit { preferences ->
-            preferences[DEBUG_MODE] = enabled
+            preferences[OVERLAY_FEEDBACK_MODE] = mode.name
         }
     }
 
-    /**
-     * Update active apps list
-     */
+    suspend fun setOverlayOpacity(opacity: Float) {
+        context.dataStore.edit { preferences ->
+            preferences[OVERLAY_OPACITY] = opacity.coerceIn(0.05f, 1.0f)
+        }
+    }
+
     suspend fun setActiveApps(apps: List<AppConfig>) {
         context.dataStore.edit { preferences ->
             preferences[ACTIVE_APPS] = serializeActiveApps(apps)
         }
     }
 
-    /**
-     * Add an app to the active apps list
-     */
     suspend fun addActiveApp(app: AppConfig) {
         context.dataStore.edit { preferences ->
             val currentApps = preferences[ACTIVE_APPS]?.let { parseActiveApps(it) } ?: emptyList()
@@ -198,9 +162,6 @@ class PreferenceStore(private val context: Context) {
         }
     }
 
-    /**
-     * Remove an app from the active apps list
-     */
     suspend fun removeActiveApp(packageName: String) {
         context.dataStore.edit { preferences ->
             val currentApps = preferences[ACTIVE_APPS]?.let { parseActiveApps(it) } ?: emptyList()
@@ -208,9 +169,6 @@ class PreferenceStore(private val context: Context) {
         }
     }
 
-    /**
-     * Toggle an app's enabled state
-     */
     suspend fun toggleAppEnabled(packageName: String) {
         context.dataStore.edit { preferences ->
             val currentApps = preferences[ACTIVE_APPS]?.let { parseActiveApps(it) } ?: emptyList()
@@ -225,21 +183,15 @@ class PreferenceStore(private val context: Context) {
         }
     }
 
-    /**
-     * Simple serialization for active apps (package:name:enabled format)
-     */
     private fun serializeActiveApps(apps: List<AppConfig>): String {
         return apps.joinToString("|") { app ->
             "${app.packageName}:${app.appName.replace(":", "_")}:${app.enabled}"
         }
     }
 
-    /**
-     * Parse serialized active apps string
-     */
     private fun parseActiveApps(serialized: String): List<AppConfig> {
         if (serialized.isBlank()) return emptyList()
-        
+
         return serialized.split("|").mapNotNull { entry ->
             val parts = entry.split(":")
             if (parts.size >= 3) {
