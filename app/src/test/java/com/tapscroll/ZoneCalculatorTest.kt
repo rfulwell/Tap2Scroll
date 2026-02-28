@@ -14,10 +14,12 @@ import org.junit.Test
 class ZoneCalculatorTest {
 
     private lateinit var calculator: ZoneCalculator
-    
+
     // Test screen dimensions (1080x2400 - typical phone)
     private val screenWidth = 1080
     private val screenHeight = 2400
+
+    private val DELTA = 0.001f
 
     @Before
     fun setup() {
@@ -38,18 +40,18 @@ class ZoneCalculatorTest {
 
         // Top zone
         val topZone = zones[0]
-        assertEquals(0f, topZone.left)
-        assertEquals(0f, topZone.top)
-        assertEquals(screenWidth.toFloat(), topZone.right)
-        assertEquals(screenHeight * 0.15f, topZone.bottom)
+        assertEquals(0f, topZone.left, DELTA)
+        assertEquals(0f, topZone.top, DELTA)
+        assertEquals(screenWidth.toFloat(), topZone.right, DELTA)
+        assertEquals(screenHeight * 0.15f, topZone.bottom, DELTA)
         assertEquals(ScrollDirection.UP, topZone.scrollDirection)
 
         // Bottom zone
         val bottomZone = zones[1]
-        assertEquals(0f, bottomZone.left)
-        assertEquals(screenHeight * 0.85f, bottomZone.top)
-        assertEquals(screenWidth.toFloat(), bottomZone.right)
-        assertEquals(screenHeight.toFloat(), bottomZone.bottom)
+        assertEquals(0f, bottomZone.left, DELTA)
+        assertEquals(screenHeight * 0.85f, bottomZone.top, DELTA)
+        assertEquals(screenWidth.toFloat(), bottomZone.right, DELTA)
+        assertEquals(screenHeight.toFloat(), bottomZone.bottom, DELTA)
         assertEquals(ScrollDirection.DOWN, bottomZone.scrollDirection)
     }
 
@@ -81,18 +83,18 @@ class ZoneCalculatorTest {
 
         // Left zone
         val leftZone = zones[0]
-        assertEquals(0f, leftZone.left)
-        assertEquals(0f, leftZone.top)
-        assertEquals(screenWidth * 0.20f, leftZone.right)
-        assertEquals(screenHeight.toFloat(), leftZone.bottom)
+        assertEquals(0f, leftZone.left, DELTA)
+        assertEquals(0f, leftZone.top, DELTA)
+        assertEquals(screenWidth * 0.20f, leftZone.right, DELTA)
+        assertEquals(screenHeight.toFloat(), leftZone.bottom, DELTA)
         assertEquals(ScrollDirection.UP, leftZone.scrollDirection)
 
         // Right zone
         val rightZone = zones[1]
-        assertEquals(screenWidth * 0.80f, rightZone.left)
-        assertEquals(0f, rightZone.top)
-        assertEquals(screenWidth.toFloat(), rightZone.right)
-        assertEquals(screenHeight.toFloat(), rightZone.bottom)
+        assertEquals(screenWidth * 0.80f, rightZone.left, DELTA)
+        assertEquals(0f, rightZone.top, DELTA)
+        assertEquals(screenWidth.toFloat(), rightZone.right, DELTA)
+        assertEquals(screenHeight.toFloat(), rightZone.bottom, DELTA)
         assertEquals(ScrollDirection.DOWN, rightZone.scrollDirection)
     }
 
@@ -109,26 +111,26 @@ class ZoneCalculatorTest {
 
         // Top-left
         val topLeft = zones[0]
-        assertEquals(0f, topLeft.left)
-        assertEquals(0f, topLeft.top)
+        assertEquals(0f, topLeft.left, DELTA)
+        assertEquals(0f, topLeft.top, DELTA)
         assertEquals(ScrollDirection.UP, topLeft.scrollDirection)
 
         // Top-right
         val topRight = zones[1]
-        assertEquals(screenWidth * 0.85f, topRight.left)
-        assertEquals(0f, topRight.top)
+        assertEquals(screenWidth * 0.85f, topRight.left, DELTA)
+        assertEquals(0f, topRight.top, DELTA)
         assertEquals(ScrollDirection.UP, topRight.scrollDirection)
 
         // Bottom-left
         val bottomLeft = zones[2]
-        assertEquals(0f, bottomLeft.left)
-        assertEquals(screenHeight * 0.85f, bottomLeft.top)
+        assertEquals(0f, bottomLeft.left, DELTA)
+        assertEquals(screenHeight * 0.85f, bottomLeft.top, DELTA)
         assertEquals(ScrollDirection.DOWN, bottomLeft.scrollDirection)
 
         // Bottom-right
         val bottomRight = zones[3]
-        assertEquals(screenWidth * 0.85f, bottomRight.left)
-        assertEquals(screenHeight * 0.85f, bottomRight.top)
+        assertEquals(screenWidth * 0.85f, bottomRight.left, DELTA)
+        assertEquals(screenHeight * 0.85f, bottomRight.top, DELTA)
         assertEquals(ScrollDirection.DOWN, bottomRight.scrollDirection)
     }
 
@@ -187,7 +189,7 @@ class ZoneCalculatorTest {
 
         val zones = calculator.calculateZones(screenWidth, screenHeight, config)
 
-        assertEquals(screenHeight * 0.25f, zones[0].bottom)
-        assertEquals(screenHeight * 0.90f, zones[1].top)
+        assertEquals(screenHeight * 0.25f, zones[0].bottom, DELTA)
+        assertEquals(screenHeight * 0.90f, zones[1].top, DELTA)
     }
 }
