@@ -119,6 +119,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
+     * Toggle debug mode
+     */
+    fun setDebugMode(enabled: Boolean) {
+        viewModelScope.launch {
+            preferenceStore.setDebugMode(enabled)
+        }
+    }
+
+    /**
      * Add an app to active apps list
      */
     fun addApp(packageName: String, appName: String) {

@@ -29,6 +29,7 @@ class PreferenceStore(private val context: Context) {
         private val VISUAL_INDICATOR = booleanPreferencesKey("visual_indicator")
         private val AVOID_INTERACTIVE = booleanPreferencesKey("avoid_interactive")
         private val ACTIVE_APPS = stringPreferencesKey("active_apps")
+        private val DEBUG_MODE = booleanPreferencesKey("debug_mode")
     }
 
     /**
@@ -76,6 +77,7 @@ class PreferenceStore(private val context: Context) {
             hapticFeedback = preferences[HAPTIC_FEEDBACK] ?: true,
             visualIndicator = preferences[VISUAL_INDICATOR] ?: true,
             avoidInteractiveElements = preferences[AVOID_INTERACTIVE] ?: true,
+            debugMode = preferences[DEBUG_MODE] ?: false,
             activeApps = activeApps
         )
     }
@@ -163,6 +165,15 @@ class PreferenceStore(private val context: Context) {
     suspend fun setAvoidInteractiveElements(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[AVOID_INTERACTIVE] = enabled
+        }
+    }
+
+    /**
+     * Update debug mode setting
+     */
+    suspend fun setDebugMode(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[DEBUG_MODE] = enabled
         }
     }
 

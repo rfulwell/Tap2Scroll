@@ -3,8 +3,11 @@ package com.tapscroll.service
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -16,6 +19,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.FrameLayout
 import com.tapscroll.data.PreferenceStore
+import com.tapscroll.data.ScrollDirection
 import com.tapscroll.data.ScrollZone
 import com.tapscroll.data.UserPreferences
 import com.tapscroll.util.NodeTreeHelper
@@ -31,6 +35,13 @@ class TapScrollService : AccessibilityService() {
     companion object {
         private const val TAG = "TapScrollService"
 
+        // Debug colors
+        private const val DEBUG_ZONE_UP = 0x306200EE    // semi-transparent blue
+        private const val DEBUG_ZONE_DOWN = 0x30EE6200   // semi-transparent orange
+        private const val DEBUG_FLASH_SCROLL = 0x8000CC00.toInt()  // green flash
+        private const val DEBUG_FLASH_INTERACTIVE = 0x80CCCC00.toInt() // yellow flash
+        private const val DEBUG_FLASH_DURATION_MS = 300L
+
         var instance: TapScrollService? = null
             private set
 
@@ -41,8 +52,9 @@ class TapScrollService : AccessibilityService() {
     private lateinit var gestureProcessor: GestureProcessor
     private lateinit var windowManager: WindowManager
     private val nodeTreeHelper = NodeTreeHelper()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
-    private val zoneOverlays = mutableListOf<View>()
+    private val zoneOverlays = mutableListOf<Pair<View, ScrollZone>>()
     private var currentPreferences: UserPreferences = UserPreferences()
     private var currentPackageName: String? = null
     private var screenWidth: Int = 0
@@ -70,7 +82,7 @@ class TapScrollService : AccessibilityService() {
 
         serviceScope.launch {
             preferenceStore.preferencesFlow.collectLatest { preferences ->
-                Log.d(TAG, "Preferences updated")
+                Log.d(TAG, "Preferences updated (debug=${preferences.debugMode})")
                 currentPreferences = preferences
                 gestureProcessor.updateZones(screenWidth, screenHeight, preferences)
                 recreateZoneOverlays()
@@ -128,9 +140,6 @@ class TapScrollService : AccessibilityService() {
         Log.d(TAG, "Screen dimensions: ${screenWidth}x${screenHeight}")
     }
 
-    /**
-     * Recreate zone overlays (called when zones or app changes)
-     */
     private fun recreateZoneOverlays() {
         removeZoneOverlays()
         if (shouldShowOverlays()) {
@@ -138,12 +147,9 @@ class TapScrollService : AccessibilityService() {
         }
     }
 
-    /**
-     * Create individual overlay windows for each scroll zone.
-     * Only zone areas get overlays; the rest of the screen passes touches through.
-     */
     private fun createZoneOverlays() {
         val zones = gestureProcessor.getZones()
+        val debug = currentPreferences.debugMode
 
         for (zone in zones) {
             val width = (zone.right - zone.left).toInt()
@@ -166,6 +172,11 @@ class TapScrollService : AccessibilityService() {
             val capturedZone = zone
             val overlayView = FrameLayout(this).apply {
                 isClickable = true
+                if (debug) {
+                    val bgColor = if (zone.scrollDirection == ScrollDirection.UP)
+                        DEBUG_ZONE_UP else DEBUG_ZONE_DOWN
+                    setBackgroundColor(bgColor)
+                }
                 setOnTouchListener { view, event ->
                     handleZoneTouchEvent(event, capturedZone, view)
                 }
@@ -173,21 +184,18 @@ class TapScrollService : AccessibilityService() {
 
             try {
                 windowManager.addView(overlayView, params)
-                zoneOverlays.add(overlayView)
+                zoneOverlays.add(Pair(overlayView, zone))
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create zone overlay", e)
             }
         }
 
         overlaysVisible = zoneOverlays.isNotEmpty()
-        Log.d(TAG, "Created ${zoneOverlays.size} zone overlays")
+        Log.d(TAG, "Created ${zoneOverlays.size} zone overlays (debug=$debug)")
     }
 
-    /**
-     * Remove all zone overlay windows
-     */
     private fun removeZoneOverlays() {
-        for (overlay in zoneOverlays) {
+        for ((overlay, _) in zoneOverlays) {
             try {
                 windowManager.removeView(overlay)
             } catch (e: Exception) {
@@ -205,9 +213,6 @@ class TapScrollService : AccessibilityService() {
             }
     }
 
-    /**
-     * Show or hide overlays based on current foreground app
-     */
     private fun updateOverlayVisibility() {
         val shouldShow = shouldShowOverlays()
         if (shouldShow && !overlaysVisible) {
@@ -218,9 +223,6 @@ class TapScrollService : AccessibilityService() {
         Log.d(TAG, "Overlay visibility: $shouldShow (app: $currentPackageName)")
     }
 
-    /**
-     * Handle a touch event on a zone overlay
-     */
     private fun handleZoneTouchEvent(event: MotionEvent, zone: ScrollZone, zoneView: View): Boolean {
         if (event.action != MotionEvent.ACTION_DOWN) return true
 
@@ -239,6 +241,7 @@ class TapScrollService : AccessibilityService() {
                     Log.d(TAG, "Tap on interactive element, replaying tap")
                     nodeAtTap.recycle()
                     rootNode.recycle()
+                    debugFlash(zoneView, zone, isInteractive = true)
                     replayTap(x, y, zoneView)
                     return true
                 }
@@ -260,17 +263,34 @@ class TapScrollService : AccessibilityService() {
             duration = scrollDuration
         )
 
-        if (success && currentPreferences.hapticFeedback) {
-            triggerHapticFeedback()
+        if (success) {
+            debugFlash(zoneView, zone, isInteractive = false)
+            if (currentPreferences.hapticFeedback) {
+                triggerHapticFeedback()
+            }
         }
 
         return true
     }
 
     /**
-     * Replay a tap to the underlying app by temporarily hiding the zone overlay
-     * so the dispatched tap gesture reaches the app beneath
+     * Flash the zone overlay briefly to indicate a tap was received.
+     * Green = scroll triggered, Yellow = interactive element (tap replayed).
      */
+    private fun debugFlash(zoneView: View, zone: ScrollZone, isInteractive: Boolean) {
+        if (!currentPreferences.debugMode) return
+
+        val flashColor = if (isInteractive) DEBUG_FLASH_INTERACTIVE else DEBUG_FLASH_SCROLL
+        zoneView.setBackgroundColor(flashColor)
+
+        // Restore the normal debug background after the flash
+        val normalColor = if (zone.scrollDirection == ScrollDirection.UP)
+            DEBUG_ZONE_UP else DEBUG_ZONE_DOWN
+        mainHandler.postDelayed({
+            zoneView.setBackgroundColor(normalColor)
+        }, DEBUG_FLASH_DURATION_MS)
+    }
+
     private fun replayTap(x: Float, y: Float, zoneView: View) {
         zoneView.visibility = View.GONE
 
@@ -284,9 +304,6 @@ class TapScrollService : AccessibilityService() {
         })
     }
 
-    /**
-     * Trigger haptic feedback
-     */
     private fun triggerHapticFeedback() {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager

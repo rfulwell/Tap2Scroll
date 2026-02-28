@@ -175,6 +175,19 @@ fun SettingsScreen(
                 }
             }
 
+            // Debug Section
+            item {
+                SectionHeader(title = "Debug")
+                SettingsCard {
+                    SwitchRow(
+                        title = "Debug overlay",
+                        description = "Show colored zones and flash on tap",
+                        checked = preferences.debugMode,
+                        onCheckedChange = { viewModel.setDebugMode(it) }
+                    )
+                }
+            }
+
             // Bottom spacing
             item {
                 Spacer(modifier = Modifier.height(32.dp))

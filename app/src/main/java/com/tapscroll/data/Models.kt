@@ -60,6 +60,7 @@ data class UserPreferences(
     val hapticFeedback: Boolean = true,
     val visualIndicator: Boolean = true,
     val avoidInteractiveElements: Boolean = true,
+    val debugMode: Boolean = false,
     val activeApps: List<AppConfig> = listOf(
         AppConfig("com.brave.browser", "Brave Browser", true)
     )
