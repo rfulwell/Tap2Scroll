@@ -2,6 +2,11 @@ package com.tapscroll.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.app.KeyguardManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -54,8 +59,25 @@ class TapScrollService : AccessibilityService() {
     private lateinit var preferenceStore: PreferenceStore
     private lateinit var gestureProcessor: GestureProcessor
     private lateinit var windowManager: WindowManager
+    private lateinit var keyguardManager: KeyguardManager
     private val nodeTreeHelper = NodeTreeHelper()
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** Hides overlays when the screen turns off or is locked. */
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    Log.d(TAG, "Screen off, removing overlays")
+                    removeZoneOverlays()
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    Log.d(TAG, "Device unlocked, restoring overlays")
+                    updateOverlayVisibility()
+                }
+            }
+        }
+    }
 
     private val zoneOverlays = mutableListOf<Pair<View, ScrollZone>>()
     private var currentPreferences: UserPreferences = UserPreferences()
@@ -80,7 +102,14 @@ class TapScrollService : AccessibilityService() {
         preferenceStore = PreferenceStore(applicationContext)
         gestureProcessor = GestureProcessor(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         swipeThresholdPx = ViewConfiguration.get(this).scaledTouchSlop * 2
+
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        registerReceiver(screenStateReceiver, filter)
 
         updateScreenDimensions()
     }
@@ -111,6 +140,7 @@ class TapScrollService : AccessibilityService() {
         Log.d(TAG, "Service destroyed")
         instance = null
         serviceScope.cancel()
+        try { unregisterReceiver(screenStateReceiver) } catch (_: Exception) {}
         removeZoneOverlays()
         gestureProcessor.clearCache()
         super.onDestroy()
@@ -235,6 +265,9 @@ class TapScrollService : AccessibilityService() {
     }
 
     private fun shouldShowOverlays(): Boolean {
+        // Don't show on lock screen or when device is locked
+        if (keyguardManager.isKeyguardLocked) return false
+
         return currentPreferences.serviceEnabled &&
             currentPackageName != null &&
             currentPreferences.activeApps.any {
