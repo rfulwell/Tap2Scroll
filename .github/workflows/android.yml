@@ -23,24 +23,7 @@ jobs:
       uses: gradle/actions/setup-gradle@v4
 
     - name: Run unit tests
-      run: |
-        set +e
-        ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee /tmp/build.log
-        EXIT_CODE=${PIPESTATUS[0]}
-        if [ $EXIT_CODE -ne 0 ]; then
-          echo "::error::E1 $(grep -i 'error\|FAILED\|failed\|e:' /tmp/build.log | grep -v 'actionable\|Daemon\|JAVA_TOOL\|--stacktrace\|--info\|--debug\|--scan\|--warning-mode' | head -15 | tr '\n' ' /// ')"
-          echo "::error::E2 $(sed -n '/What went wrong/,/Try:/p' /tmp/build.log | head -15 | tr '\n' ' /// ')"
-          echo "::error::E3 $(grep -B2 'FAILED' /tmp/build.log | grep -v 'actionable\|Daemon' | head -15 | tr '\n' ' /// ')"
-          echo "::error::E4 $(tail -50 /tmp/build.log | tr '\n' ' /// ')"
-          exit $EXIT_CODE
-        fi
-
-    - name: Upload build log
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-log
-        path: /tmp/build.log
+      run: ./gradlew testDebugUnitTest --stacktrace
 
     - name: Build debug APK
       run: ./gradlew assembleDebug
