@@ -60,6 +60,7 @@ class TapScrollService : AccessibilityService() {
     private var screenWidth: Int = 0
     private var screenHeight: Int = 0
     private var overlaysVisible: Boolean = false
+    private val launchableAppCache = mutableMapOf<String, Boolean>()
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -110,12 +111,34 @@ class TapScrollService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                val packageName = event.packageName?.toString()
-                if (packageName != null && packageName != currentPackageName) {
-                    currentPackageName = packageName
-                    Log.d(TAG, "Foreground app changed: $packageName")
-                    updateOverlayVisibility()
+                val packageName = event.packageName?.toString() ?: return
+                if (packageName == currentPackageName) return
+
+                // Only track real user-facing apps; ignore system UI, keyboards,
+                // status bar, etc. that fire TYPE_WINDOW_STATE_CHANGED during
+                // app transitions and would cause overlays to flicker off.
+                if (!isLaunchableApp(packageName)) {
+                    Log.d(TAG, "Ignoring non-launchable window: $packageName")
+                    return
                 }
+
+                currentPackageName = packageName
+                Log.d(TAG, "Foreground app changed: $packageName")
+                updateOverlayVisibility()
+            }
+        }
+    }
+
+    /**
+     * Check if a package is a user-facing app (has a launcher activity).
+     * Results are cached so PackageManager is only queried once per package.
+     */
+    private fun isLaunchableApp(packageName: String): Boolean {
+        return launchableAppCache.getOrPut(packageName) {
+            try {
+                packageManager.getLaunchIntentForPackage(packageName) != null
+            } catch (e: Exception) {
+                false
             }
         }
     }
