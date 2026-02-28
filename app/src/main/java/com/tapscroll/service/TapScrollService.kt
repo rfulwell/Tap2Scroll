@@ -165,6 +165,7 @@ class TapScrollService : AccessibilityService() {
 
             val capturedZone = zone
             val overlayView = FrameLayout(this).apply {
+                isClickable = true
                 setOnTouchListener { view, event ->
                     handleZoneTouchEvent(event, capturedZone, view)
                 }
