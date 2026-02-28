@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tap to Scroll</string>
+    
+    <string name="service_description">Converts tap gestures into scroll actions within selected apps. Tap in designated screen zones to scroll up or down without swiping.</string>
+    
+    <!-- Settings Screen -->
+    <string name="settings_title">Tap to Scroll Settings</string>
+    <string name="service_enabled">Service Enabled</string>
+    <string name="service_disabled_message">Enable the accessibility service to use Tap to Scroll</string>
+    <string name="open_accessibility_settings">Open Accessibility Settings</string>
+    
+    <!-- Scroll Settings -->
+    <string name="scroll_settings">Scroll Settings</string>
+    <string name="scroll_distance">Scroll Distance</string>
+    <string name="scroll_distance_percent">%1$d%% of screen</string>
+    <string name="scroll_speed">Scroll Speed</string>
+    <string name="speed_slow">Slow</string>
+    <string name="speed_medium">Medium</string>
+    <string name="speed_fast">Fast</string>
+    <string name="zone_layout">Zone Layout</string>
+    <string name="zone_layout_edges">Edge zones</string>
+    <string name="zone_layout_sides">Left/Right split</string>
+    <string name="zone_layout_corners">Corner zones</string>
+    
+    <!-- Zone Editor -->
+    <string name="zone_editor_title">Configure Zones</string>
+    <string name="zone_top">Top Zone</string>
+    <string name="zone_bottom">Bottom Zone</string>
+    <string name="zone_left">Left Zone</string>
+    <string name="zone_right">Right Zone</string>
+    <string name="zone_size">Zone Size: %1$d%%</string>
+    <string name="reset_zones">Reset to Default</string>
+    <string name="save_zones">Save</string>
+    
+    <!-- App Selector -->
+    <string name="active_apps">Active Apps</string>
+    <string name="add_app">Add app</string>
+    <string name="no_apps_selected">No apps selected. Add apps to enable tap-to-scroll.</string>
+    <string name="search_apps">Search apps</string>
+    
+    <!-- Advanced Settings -->
+    <string name="advanced_settings">Advanced</string>
+    <string name="invert_direction">Invert scroll direction</string>
+    <string name="invert_direction_desc">Swap up and down scroll behavior</string>
+    <string name="haptic_feedback">Haptic feedback</string>
+    <string name="haptic_feedback_desc">Vibrate when scroll is triggered</string>
+    <string name="visual_indicator">Visual indicator</string>
+    <string name="visual_indicator_desc">Show arrow when scrolling</string>
+    <string name="avoid_interactive">Avoid interactive elements</string>
+    <string name="avoid_interactive_desc">Don\'t scroll when tapping links or buttons</string>
+    
+    <!-- Common -->
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="enabled">Enabled</string>
+    <string name="disabled">Disabled</string>
+</resources>
