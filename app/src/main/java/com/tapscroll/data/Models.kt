@@ -70,6 +70,8 @@ data class UserPreferences(
     val hapticFeedback: Boolean = true,
     val visualIndicator: Boolean = true,
     val avoidInteractiveElements: Boolean = true,
+    val scrollUpEnabled: Boolean = true,
+    val scrollDownEnabled: Boolean = true,
     val overlayFeedbackMode: OverlayFeedbackMode = OverlayFeedbackMode.FLASH_ON_TAP,
     val overlayOpacity: Float = 0.3f,
     val activeApps: List<AppConfig> = listOf(

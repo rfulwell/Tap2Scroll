@@ -27,6 +27,8 @@ class PreferenceStore(private val context: Context) {
         private val VISUAL_INDICATOR = booleanPreferencesKey("visual_indicator")
         private val AVOID_INTERACTIVE = booleanPreferencesKey("avoid_interactive")
         private val ACTIVE_APPS = stringPreferencesKey("active_apps")
+        private val SCROLL_UP_ENABLED = booleanPreferencesKey("scroll_up_enabled")
+        private val SCROLL_DOWN_ENABLED = booleanPreferencesKey("scroll_down_enabled")
         private val OVERLAY_FEEDBACK_MODE = stringPreferencesKey("overlay_feedback_mode")
         private val OVERLAY_OPACITY = floatPreferencesKey("overlay_opacity")
     }
@@ -69,6 +71,8 @@ class PreferenceStore(private val context: Context) {
             hapticFeedback = preferences[HAPTIC_FEEDBACK] ?: true,
             visualIndicator = preferences[VISUAL_INDICATOR] ?: true,
             avoidInteractiveElements = preferences[AVOID_INTERACTIVE] ?: true,
+            scrollUpEnabled = preferences[SCROLL_UP_ENABLED] ?: true,
+            scrollDownEnabled = preferences[SCROLL_DOWN_ENABLED] ?: true,
             overlayFeedbackMode = preferences[OVERLAY_FEEDBACK_MODE]?.let {
                 try { OverlayFeedbackMode.valueOf(it) } catch (_: Exception) { OverlayFeedbackMode.FLASH_ON_TAP }
             } ?: OverlayFeedbackMode.FLASH_ON_TAP,
@@ -132,6 +136,18 @@ class PreferenceStore(private val context: Context) {
     suspend fun setAvoidInteractiveElements(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[AVOID_INTERACTIVE] = enabled
+        }
+    }
+
+    suspend fun setScrollUpEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[SCROLL_UP_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setScrollDownEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[SCROLL_DOWN_ENABLED] = enabled
         }
     }
 

@@ -8,7 +8,6 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -46,9 +45,6 @@ class TapScrollService : AccessibilityService() {
         private const val FLASH_COLOR_INTERACTIVE = 0xCCCC00 // yellow (no alpha)
         private const val FLASH_DURATION_MS = 300L
 
-        // Touch gesture thresholds
-        private const val LONG_PRESS_THRESHOLD_MS = 400L
-
         var instance: TapScrollService? = null
             private set
 
@@ -72,7 +68,6 @@ class TapScrollService : AccessibilityService() {
     // Per-gesture tracking (reset on each ACTION_DOWN)
     private var downX: Float = 0f
     private var downY: Float = 0f
-    private var downTime: Long = 0L
     private var gesturePassedThrough: Boolean = false
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -257,11 +252,17 @@ class TapScrollService : AccessibilityService() {
     }
 
     /**
-     * Gesture-aware touch handler. Distinguishes taps from swipes and long-presses.
+     * Gesture-aware touch handler.
      *
-     * ACTION_DOWN: check interactive element → if yes, pass through. Otherwise record.
-     * ACTION_MOVE: if displacement > threshold → swipe, hide overlay to pass through.
-     * ACTION_UP:   if short tap and not passed through → perform scroll.
+     * Scroll is dispatched on ACTION_DOWN (dispatchGesture doesn't work
+     * reliably when called during ACTION_UP because the system is still
+     * finalising the current touch sequence).
+     *
+     * Swipe detection: if the finger moves beyond swipeThresholdPx the
+     * overlay hides itself so subsequent MOVE/UP events reach the app.
+     *
+     * Interactive elements: detected on ACTION_DOWN; overlay hides and
+     * returns false so the full gesture passes through to the app.
      */
     private fun handleZoneTouchEvent(event: MotionEvent, zone: ScrollZone, zoneView: View): Boolean {
         when (event.action) {
@@ -270,8 +271,7 @@ class TapScrollService : AccessibilityService() {
                 val y = event.rawY
                 Log.d(TAG, "Zone touch DOWN at ($x, $y), direction=${zone.scrollDirection}")
 
-                // Check for interactive elements — if found, let the entire gesture
-                // pass through to the underlying app natively.
+                // Check for interactive elements — pass entire gesture through
                 if (currentPreferences.avoidInteractiveElements) {
                     val rootNode = rootInActiveWindow
                     if (rootNode != null) {
@@ -284,7 +284,6 @@ class TapScrollService : AccessibilityService() {
                             Log.d(TAG, "Interactive element detected, passing through")
                             flashZone(zoneView, zone, isInteractive = true)
                             gesturePassedThrough = true
-                            // Hide overlay so all subsequent events reach the app
                             zoneView.visibility = View.GONE
                             mainHandler.postDelayed({
                                 zoneView.visibility = View.VISIBLE
@@ -294,47 +293,11 @@ class TapScrollService : AccessibilityService() {
                     }
                 }
 
-                // Not interactive — record position/time, consume event
-                downX = event.rawX
-                downY = event.rawY
-                downTime = SystemClock.uptimeMillis()
+                // Not interactive — perform scroll immediately
+                downX = x
+                downY = y
                 gesturePassedThrough = false
-                return true
-            }
 
-            MotionEvent.ACTION_MOVE -> {
-                if (gesturePassedThrough) return false
-
-                val dx = event.rawX - downX
-                val dy = event.rawY - downY
-                val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-
-                if (distance > swipeThresholdPx) {
-                    // User is swiping, not tapping — let it through
-                    Log.d(TAG, "Swipe detected (dist=$distance), passing through")
-                    gesturePassedThrough = true
-                    zoneView.visibility = View.GONE
-                    mainHandler.postDelayed({
-                        zoneView.visibility = View.VISIBLE
-                    }, 500)
-                    return false
-                }
-                return true
-            }
-
-            MotionEvent.ACTION_UP -> {
-                if (gesturePassedThrough) return false
-
-                val elapsed = SystemClock.uptimeMillis() - downTime
-
-                if (elapsed >= LONG_PRESS_THRESHOLD_MS) {
-                    // Long press — don't scroll, pass through
-                    Log.d(TAG, "Long press detected (${elapsed}ms), ignoring")
-                    return true
-                }
-
-                // Short tap — perform scroll
-                Log.d(TAG, "Tap confirmed (${elapsed}ms), scrolling ${zone.scrollDirection}")
                 val scrollDistance = (screenHeight * currentPreferences.scrollDistancePercent).toInt()
                 val scrollDuration = currentPreferences.scrollSpeed.durationMs
 
@@ -352,6 +315,30 @@ class TapScrollService : AccessibilityService() {
                         triggerHapticFeedback()
                     }
                 }
+                return true
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (gesturePassedThrough) return false
+
+                val dx = event.rawX - downX
+                val dy = event.rawY - downY
+                val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+
+                if (distance > swipeThresholdPx) {
+                    Log.d(TAG, "Swipe detected (dist=$distance), passing through")
+                    gesturePassedThrough = true
+                    zoneView.visibility = View.GONE
+                    mainHandler.postDelayed({
+                        zoneView.visibility = View.VISIBLE
+                    }, 500)
+                    return false
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_UP -> {
+                if (gesturePassedThrough) return false
                 return true
             }
 

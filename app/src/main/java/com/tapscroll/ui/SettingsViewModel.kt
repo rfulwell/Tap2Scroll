@@ -108,6 +108,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun setScrollUpEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferenceStore.setScrollUpEnabled(enabled)
+        }
+    }
+
+    fun setScrollDownEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferenceStore.setScrollDownEnabled(enabled)
+        }
+    }
+
     fun setOverlayFeedbackMode(mode: OverlayFeedbackMode) {
         viewModelScope.launch {
             preferenceStore.setOverlayFeedbackMode(mode)

@@ -119,6 +119,24 @@ fun SettingsScreen(
                         selectedType = preferences.zoneConfig.zoneType,
                         onTypeSelected = { viewModel.setZoneType(it) }
                     )
+
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    SwitchRow(
+                        title = "Scroll up zone",
+                        description = if (preferences.zoneConfig.zoneType == ZoneType.EDGES)
+                            "Top area of screen" else "Left side of screen",
+                        checked = preferences.scrollUpEnabled,
+                        onCheckedChange = { viewModel.setScrollUpEnabled(it) }
+                    )
+
+                    SwitchRow(
+                        title = "Scroll down zone",
+                        description = if (preferences.zoneConfig.zoneType == ZoneType.EDGES)
+                            "Bottom area of screen" else "Right side of screen",
+                        checked = preferences.scrollDownEnabled,
+                        onCheckedChange = { viewModel.setScrollDownEnabled(it) }
+                    )
                 }
             }
 

@@ -31,12 +31,19 @@ class GestureProcessor(
     fun updateZones(screenWidth: Int, screenHeight: Int, preferences: UserPreferences) {
         cachedScreenWidth = screenWidth
         cachedScreenHeight = screenHeight
-        cachedZones = zoneCalculator.calculateZones(
+        val allZones = zoneCalculator.calculateZones(
             screenWidth,
             screenHeight,
             preferences.zoneConfig,
             preferences.invertDirection
         )
+        // Filter out disabled directions
+        cachedZones = allZones.filter { zone ->
+            when (zone.scrollDirection) {
+                ScrollDirection.UP -> preferences.scrollUpEnabled
+                ScrollDirection.DOWN -> preferences.scrollDownEnabled
+            }
+        }
         Log.d(TAG, "Zones updated: ${cachedZones.size} zones for ${screenWidth}x${screenHeight}")
     }
 
