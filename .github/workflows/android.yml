@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   build:
@@ -30,24 +31,27 @@ jobs:
       continue-on-error: true
       run: ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee build-output.log
 
-    - name: Post build errors as commit comment
+    - name: Post build errors
       if: steps.tests.outcome == 'failure'
       uses: actions/github-script@v7
       with:
         script: |
           const fs = require('fs');
-          const output = fs.readFileSync('build-output.log', 'utf8');
+          let output = 'build-output.log not found';
+          try {
+            output = fs.readFileSync('build-output.log', 'utf8');
+          } catch (e) {
+            output = `File read error: ${e.message}`;
+          }
           const lines = output.split('\n');
-          // Get error lines and last 100 lines
-          const errorLines = lines.filter(l => /error:|FAILED|Error:|e:|w:/.test(l)).slice(0, 30);
-          const last100 = lines.slice(-100);
-          const combined = [...new Set([...errorLines, '---TAIL---', ...last100])];
-          const body = combined.join('\n');
-          await github.rest.repos.createCommitComment({
+          const last120 = lines.slice(-120).join('\n');
+          // Create an issue with the build output
+          await github.rest.issues.create({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            commit_sha: context.sha,
-            body: `## Build Failure\n\`\`\`\n${body.substring(0, 60000)}\n\`\`\``
+            title: `Build failure on ${context.sha.substring(0, 8)}`,
+            body: `## Build Output (last 120 lines)\n\`\`\`\n${last120.substring(0, 60000)}\n\`\`\``,
+            labels: ['ci-debug']
           });
 
     - name: Fail if tests failed
