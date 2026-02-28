@@ -1,6 +1,7 @@
 package com.tapscroll.util
 
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 
 /**
  * Helper class for working with accessibility node trees
@@ -107,7 +108,7 @@ class NodeTreeHelper {
         }
 
         // Check role description for web content
-        val roleDescription = node.roleDescription?.toString()?.lowercase() ?: ""
+        val roleDescription = AccessibilityNodeInfoCompat.wrap(node).roleDescription?.toString()?.lowercase() ?: ""
         if (INTERACTIVE_ROLES.contains(roleDescription)) {
             return true
         }
