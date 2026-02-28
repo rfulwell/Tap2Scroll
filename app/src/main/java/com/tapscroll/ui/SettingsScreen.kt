@@ -2,6 +2,7 @@ package com.tapscroll.ui
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -154,7 +155,7 @@ fun SettingsScreen(
                         onCheckedChange = { viewModel.setInvertDirection(it) }
                     )
                     
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
                     
                     SwitchRow(
                         title = "Haptic feedback",
@@ -163,7 +164,7 @@ fun SettingsScreen(
                         onCheckedChange = { viewModel.setHapticFeedback(it) }
                     )
                     
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
                     
                     SwitchRow(
                         title = "Avoid interactive elements",
