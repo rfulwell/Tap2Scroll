@@ -338,7 +338,7 @@ class TapScrollService : AccessibilityService() {
                 downY = y
                 gesturePassedThrough = false
                 scrollInFlight = true
-                setAllOverlaysVisible(false)
+                setOverlaysTouchable(false)
 
                 val scrollDistance = (screenHeight * currentPreferences.scrollDistancePercent).toInt()
                 val scrollDuration = currentPreferences.scrollSpeed.durationMs
@@ -361,12 +361,12 @@ class TapScrollService : AccessibilityService() {
                         override fun onCompleted(gestureDescription: GestureDescription) {
                             Log.d(TAG, "Scroll gesture completed")
                             scrollInFlight = false
-                            setAllOverlaysVisible(true)
+                            setOverlaysTouchable(true)
                         }
                         override fun onCancelled(gestureDescription: GestureDescription) {
                             Log.w(TAG, "Scroll gesture cancelled")
                             scrollInFlight = false
-                            setAllOverlaysVisible(true)
+                            setOverlaysTouchable(true)
                         }
                     }
                 )
@@ -407,13 +407,22 @@ class TapScrollService : AccessibilityService() {
     }
 
     /**
-     * Show or hide all zone overlay views. Used to prevent the dispatched
-     * scroll gesture from hitting zone overlays as it sweeps across the screen.
+     * Make all zone overlay windows pass-through (not touchable) or restore them.
+     * Setting FLAG_NOT_TOUCHABLE on the window params tells the WindowManager to
+     * let touches fall through to the app underneath — unlike View.INVISIBLE which
+     * only hides the view but leaves the window intercepting events.
      */
-    private fun setAllOverlaysVisible(visible: Boolean) {
-        val visibility = if (visible) View.VISIBLE else View.INVISIBLE
+    private fun setOverlaysTouchable(touchable: Boolean) {
         for ((overlay, _) in zoneOverlays) {
-            overlay.visibility = visibility
+            val params = overlay.layoutParams as? WindowManager.LayoutParams ?: continue
+            if (touchable) {
+                params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+            } else {
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            }
+            try {
+                windowManager.updateViewLayout(overlay, params)
+            } catch (_: Exception) {}
         }
     }
 
